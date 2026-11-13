@@ -1,33 +1,30 @@
-var request = require("request");
-
 // populate environment variables locally.
 require('dotenv').config();
 const {
   NETLIFY_AUTH_TOKEN
 } = process.env;
 
-// hardcoding this for a moment... TODO: replace request with somethign that follows redirects
+// hardcoding this for a moment
 const URL = "https://jamstack-comments.netlify.com/";
 
 /*
   delete this submission via the api
 */
-function purgeComment(id) {
+async function purgeComment(id) {
   var url = `https://api.netlify.com/api/v1/submissions/${id}?access_token=${NETLIFY_AUTH_TOKEN}`;
-  request.delete(url, function(err, response, body){
-    if(err){
-      return console.log(err);
-    } else {
-      return console.log("Comment deleted from queue.");
-    }
-  });
+  try {
+    await fetch(url, { method: "DELETE" });
+    console.log("Comment deleted from queue.");
+  } catch (err) {
+    console.log(err);
+  }
 }
 
 
 /*
   Handle the lambda invocation
 */
-export function handler(event, context, callback) {
+export async function handler(event) {
 
   // parse the payload
   var body = event.body.split("payload=")[1];
@@ -36,56 +33,46 @@ export function handler(event, context, callback) {
   var id = payload.actions[0].value;
 
   if(method == "delete") {
-    purgeComment(id);
-    callback(null, {
+    await purgeComment(id);
+    return {
       statusCode: 200,
       body: "Comment deleted"
-    });
+    };
   } else if (method == "approve"){
 
     // get the comment data from the queue
     var url = `https://api.netlify.com/api/v1/submissions/${id}?access_token=${NETLIFY_AUTH_TOKEN}`;
+    var response = await fetch(url);
+    if (!response.ok) {
+      return { statusCode: response.status, body: "Could not read the comment from the queue" };
+    }
+    var data = (await response.json()).data;
 
+    // now we have the data, let's massage it and post it to the approved form
+    var form = new FormData();
+    form.append('form-name', "approved-comments");
+    form.append('path', data.path);
+    form.append('received', new Date().toString());
+    form.append('email', data.email);
+    form.append('name', data.name);
+    form.append('comment', data.comment);
+    var approvedURL = URL;
 
+    console.log("Posting to", approvedURL);
 
-    request(url, function(err, response, body){
-      if(!err && response.statusCode === 200){
-        var data = JSON.parse(body).data;
-
-        // now we have the data, let's massage it and post it to the approved form
-        var payload = {
-          'form-name' : "approved-comments",
-          'path': data.path,
-          'received': new Date().toString(),
-          'email': data.email,
-          'name': data.name,
-          'comment': data.comment
-        };
-        var approvedURL = URL;
-
-        console.log("Posting to", approvedURL);
-        console.log(payload);
-
-        // post the comment to the approved lost
-        request.post({'url':approvedURL, 'formData': payload }, function(err, httpResponse, body) {
-          var msg;
-          if (err) {
-            msg = 'Post to approved comments failed:' + err;
-            console.log(msg);
-          } else {
-            msg = 'Post to approved comments list successful.'
-            console.log(msg);
-            purgeComment(id);
-          }
-          var msg = "Comment registered. Site deploying to include it.";
-          callback(null, {
-            statusCode: 200,
-            body: msg
-          })
-          return console.log(msg);
-        });
-      }
-    });
-
+    // post the comment to the approved list
+    try {
+      await fetch(approvedURL, { method: "POST", body: form });
+      console.log('Post to approved comments list successful.');
+      await purgeComment(id);
+    } catch (err) {
+      console.log('Post to approved comments failed:' + err);
+    }
+    var msg = "Comment registered. Site deploying to include it.";
+    console.log(msg);
+    return {
+      statusCode: 200,
+      body: msg
+    };
   }
 }

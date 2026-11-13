@@ -1,7 +1,5 @@
 'use strict';
 
-var request = require("request");
-
 // populate environment variables locally.
 require('dotenv').config()
 
@@ -10,7 +8,7 @@ const URL = "https://jamstack-comments.netlify.com";
 /*
   Our serverless function handler
 */
-export function handler(event, context, callback) {
+export async function handler(event) {
 
   // get the arguments from the notification
   var body = JSON.parse(event.body);
@@ -50,18 +48,21 @@ export function handler(event, context, callback) {
     };
 
     // post the notification to Slack
-    request.post({url:slackURL, json: slackPayload}, function(err, httpResponse, body) {
-      var msg;
-      if (err) {
-        msg = 'Post to Slack failed:' + err;
-      } else {
-        msg = 'Post to Slack successful!  Server responded with:' + body;
-      }
-      callback(null, {
-        statusCode: 200,
-        body: msg
-      })
-      return console.log(msg);
-    });
+    var msg;
+    try {
+      var response = await fetch(slackURL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(slackPayload)
+      });
+      msg = 'Post to Slack successful!  Server responded with:' + await response.text();
+    } catch (err) {
+      msg = 'Post to Slack failed:' + err;
+    }
+    console.log(msg);
+    return {
+      statusCode: 200,
+      body: msg
+    };
 
 }

@@ -2,7 +2,7 @@
   Functions = "src/functions"
   command = "npm run build"
   publish = "dist"
-  environment = { NODE_VERSION = "12.18.0" }
+  environment = { NODE_VERSION = "22" }
 
 # Config for the Netlify Build Plugin: netlify-plugin-form-submissions
 [[plugins]]
