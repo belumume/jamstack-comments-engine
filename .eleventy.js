@@ -15,14 +15,15 @@ module.exports = function(config) {
 
 
 
-  const Terser = require("terser");
-  config.addFilter("jsmin", function(code) {
-      let minified = Terser.minify(code);
-      if( minified.error ) {
-          console.log("Terser error: ", minified.error);
-          return code;
-      }
+  const { minify } = require("terser");
+  config.addAsyncFilter("jsmin", async function(code) {
+    try {
+      const minified = await minify(code);
       return minified.code;
+    } catch (error) {
+      console.log("Terser error: ", error);
+      return code;
+    }
   });
 
 
